@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cabane</title>
+<!--
+  ─────────────────────────────────────────────────────────────
+  LE RÉCEPTEUR CAST DE CABANE — la page qui tourne SUR LA TÉLÉ.
+
+  Pourquoi elle existe : l'app envoyait jusqu'ici l'adresse d'une page
+  servie par le téléphone, en demandant au téléviseur de l'ouvrir dans son
+  NAVIGATEUR. Or le 50PUS8000 est un Google TV : il n'en a aucun. La télé
+  répondait 200 et n'avait rien à lancer — mesuré le 2026-08-08.
+
+  Ici, c'est Chromecast qui charge cette page et l'exécute lui-même. On
+  garde donc TOUT ce que l'image castée aurait perdu : le disque qui
+  tourne à 33⅓, le reflet, le bandeau de fin de face, et la mise à jour
+  en direct.
+
+  ⚠️ Le CSS est repris À L'IDENTIQUE de `PageVinyleTV.swift` (design v4
+  validé). Il ne se réinvente pas ici : si l'un change, l'autre suit.
+  ⚠️ HISTORIQUE DE L'HÉBERGEMENT — deux retournements, gardés pour mémoire :
+  d'abord « il faut du HTTPS » (faux pour une app de test), puis « l'iPad la
+  sert en HTTP » (vrai, mais la liste d'appareils de test n'a JAMAIS reconnu
+  le dongle : série déclarée, console verte, NOT_FOUND quand même).
+  ⇒ Depuis le 2026-08-10 la page est HÉBERGÉE EN HTTPS PUBLIC (GitHub Pages)
+  et l'application est PUBLIÉE : elle se charge sur n'importe quel appareil
+  Cast, sans déclaration. Conséquence : servie en HTTPS, cette page REFUSE
+  les images http (contenu mixte) — l'émetteur n'envoie donc plus jamais la
+  pochette de l'ampli, seulement du HTTPS (Discogs, catalogue Apple). Une
+  cover absente est encaissée proprement (fond noir + textes).
+  ─────────────────────────────────────────────────────────────
+-->
+<script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;overflow:hidden;width:100vw;height:100vh;
+    font-family:-apple-system,'SF Pro Display','Helvetica Neue',Roboto,system-ui,sans-serif}
+  .fond{position:absolute;inset:0;background-position:center;background-size:cover;
+    filter:blur(30px) saturate(1.2);transform:scale(1.14);opacity:.95}
+  .voile{position:absolute;inset:0;background:
+    linear-gradient(90deg, rgba(3,3,6,.35) 0%, rgba(3,3,6,.15) 38%,
+                            rgba(3,3,6,.58) 70%, rgba(3,3,6,.7) 100%)}
+  .vignette{position:absolute;inset:0;background:
+    radial-gradient(130% 130% at 50% 45%, transparent 58%, rgba(0,0,0,.45) 100%)}
+  /* Tailles BORNÉES en vw : la pochette ne peut JAMAIS atteindre la zone
+     de texte (règle user : le texte vit sur le fond flou, jamais sur la
+     cover) — vrai en 16:9 comme sur tout autre écran. */
+  .lueur{position:absolute;left:6%;top:26%;width:min(48vh,30vw);height:min(48vh,30vw);
+    border-radius:50%;filter:blur(60px);opacity:.38}
+  .sleeve{position:absolute;left:7%;top:50%;transform:translateY(-50%);
+    height:min(74vh,44vw);width:min(74vh,44vw);border-radius:1vh;
+    background-position:center;background-size:cover;
+    box-shadow:0 30px 90px rgba(0,0,0,.65)}
+  .sleeve::after{content:"";position:absolute;inset:0;border-radius:1vh;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+  .disqueWrap{position:absolute;left:3.5%;bottom:7%;
+    height:min(30vh,17vw);width:min(30vh,17vw);
+    filter:drop-shadow(0 12px 26px rgba(0,0,0,.72));
+    opacity:0;transition:opacity .6s ease}
+  .rotor{position:absolute;inset:0;border-radius:50%;
+    background:
+      repeating-radial-gradient(circle at 50% 50%,
+        rgba(255,255,255,.05) 0 1px, rgba(0,0,0,0) 1px 3.6px),
+      radial-gradient(circle at 50% 50%, #141418 0%, #09090B 78%, #050506 100%);
+    animation:tourne 1.81s linear infinite}   /* 1,81 s = 33⅓ tours/min */
+  .label{position:absolute;inset:28%;border-radius:50%;
+    background-position:center;background-size:cover;
+    box-shadow:0 0 0 3px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.18)}
+  .sheen{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    background:
+      radial-gradient(circle at 31% 24%, rgba(255,255,255,.17), transparent 46%),
+      radial-gradient(circle at 72% 82%, rgba(255,255,255,.05), transparent 40%);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.1)}
+  .trou{position:absolute;left:50%;top:50%;width:3%;height:3%;
+    transform:translate(-50%,-50%);border-radius:50%;background:#08080A;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.9), 0 0 0 2px rgba(255,255,255,.12)}
+  @keyframes tourne{to{transform:rotate(360deg)}}
+  .texte{position:absolute;right:6.5%;top:50%;transform:translateY(-50%);width:32%}
+  .et{font-size:1.35vh;font-weight:600;letter-spacing:.34vh;text-transform:uppercase;
+    color:rgba(255,255,255,.5);display:flex;align-items:center;gap:1.1vh}
+  .et b{width:.9vh;height:.9vh;border-radius:50%}
+  h1{font-size:5vh;font-weight:700;letter-spacing:-.07vh;line-height:1.05;
+    color:#FFF;margin-top:1.8vh}
+  .artiste{font-size:2.5vh;font-weight:400;color:rgba(255,255,255,.68);margin-top:.9vh}
+  .meta{font-size:1.65vh;color:rgba(255,255,255,.4);margin-top:2.2vh}
+  /* La piste en cours — streaming seulement. En vinyle on ne l'invente
+     pas : la platine est analogique, l'ampli ne sait pas ce qui joue.
+     (Ça viendra avec la détection des silences.) */
+  .piste{font-size:2vh;color:#FFF;margin-top:2.6vh;opacity:0;
+    transition:opacity .5s ease}
+  .piste b{display:block;font-size:1.3vh;letter-spacing:.3vh;font-weight:600;
+    text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:.7vh}
+  /* bandeau « retourne le disque » — léger, haut-gauche, au-dessus de la
+     pochette (elle commence vers 13vh) ; fondu d'opacité pur */
+  .flip{position:absolute;left:3vh;top:3vh;display:flex;align-items:center;
+    gap:1.2vh;padding:1.2vh 2.2vh;border-radius:100vh;
+    background:rgba(5,5,8,.55);color:#FFF;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.22), 0 6px 22px rgba(0,0,0,.4);
+    font-size:2vh;font-weight:500;letter-spacing:.02vh;
+    opacity:0;transition:opacity .8s ease;pointer-events:none}
+  /* L'attente : ni logo ni « connecté ». Un point qui respire, et c'est
+     tout — on ne meuble pas un écran de salon. */
+  .veille{position:absolute;inset:0;display:flex;align-items:center;
+    justify-content:center;transition:opacity .8s ease}
+  .veille i{width:1.1vh;height:1.1vh;border-radius:50%;background:#E8A020;
+    animation:respire 3.4s ease-in-out infinite}
+  @keyframes respire{0%,100%{opacity:.25}50%{opacity:.75}}
+  .cache{opacity:0 !important}
+</style></head>
+<body>
+  <div class="fond" id="fond"></div><div class="voile"></div><div class="vignette"></div>
+  <div class="lueur" id="lueur"></div>
+  <div class="sleeve" id="sleeve"></div>
+  <div class="disqueWrap" id="platine">
+    <div class="rotor"><div class="label" id="label"></div></div>
+    <div class="sheen"></div><div class="trou"></div>
+  </div>
+  <div class="texte cache" id="texte">
+    <div class="et"><b id="pastille"></b> <span id="source">Vinyle</span></div>
+    <h1 id="titre"></h1>
+    <div class="artiste" id="artiste"></div>
+    <div class="meta" id="meta"></div>
+    <div class="piste" id="piste"><b>En cours</b><span id="pisteTxt"></span></div>
+  </div>
+  <div class="flip" id="flip"><span style="font-size:2.4vh;line-height:1"
+       id="flipPic">&#10227;</span><span id="flipTxt"></span></div>
+  <div class="veille" id="veille"><i></i></div>
+
+<script>
+'use strict';
+// ── L'ÉTAT REÇU ──────────────────────────────────────────────
+// L'app pousse un objet complet à chaque changement. On ne garde rien
+// d'autre : pas de cache, pas de fusion — l'émetteur fait foi.
+var etat = null;
+
+function texte(id, v) { document.getElementById(id).textContent = v || ''; }
+function image(id, url) {
+  document.getElementById(id).style.backgroundImage = url ? 'url("' + url + '")' : 'none';
+}
+
+function peindre(e) {
+  etat = e;
+  var vinyle = e.mode === 'vinyle';
+  var accent = (e.couleurs && e.couleurs[0]) || '#E8A020';
+
+  image('fond', e.cover);
+  image('sleeve', e.cover);
+  image('label', e.cover);
+  document.getElementById('lueur').style.background =
+    'radial-gradient(circle, ' + accent + ' 0%, transparent 62%)';
+  document.getElementById('pastille').style.background = accent;
+  document.getElementById('flipPic').style.color = accent;
+
+  texte('source', vinyle ? 'Vinyle' : (e.source || 'En écoute'));
+  texte('titre', e.titre);
+  texte('artiste', e.artiste);
+  texte('meta', e.meta);
+
+  // ⚠️ La piste n'apparaît QUE si l'émetteur la connaît. Pas de tiret,
+  // pas de « — » : on ne meuble pas (règle de l'app, la même que la météo).
+  texte('pisteTxt', e.piste);
+  document.getElementById('piste').style.opacity = e.piste ? 1 : 0;
+
+  // Le disque ne tourne que pour un vinyle : le dessiner sur un flux
+  // Deezer serait un faux objet.
+  document.getElementById('platine').style.opacity = vinyle ? 1 : 0;
+
+  document.getElementById('texte').classList.remove('cache');
+  document.getElementById('veille').classList.add('cache');
+  majBandeau();
+}
+
+// ── Le bandeau de fin de face ────────────────────────────────
+// L'émetteur envoie l'INSTANT de fin (epoch, en secondes) ; l'horloge
+// locale de la télé décide de l'affichage. Le bandeau tombe donc pile à
+// l'heure même si aucun message n'arrive entre-temps.
+function majBandeau() {
+  var el = document.getElementById('flip');
+  var e = etat || {};
+  var visible = e.mode === 'vinyle' && !!e.fin && (Date.now() / 1000) >= e.fin;
+  if (visible) {
+    texte('flipTxt', 'Face ' + (e.face || '') + ' terminée — retourne le disque'
+                     + (e.suivante ? ' (face ' + e.suivante + ')' : ''));
+  }
+  el.style.opacity = visible ? 1 : 0;
+}
+setInterval(majBandeau, 1000);
+
+// ── Le canal Cast ────────────────────────────────────────────
+var contexte = cast.framework.CastReceiverContext.getInstance();
+contexte.addCustomMessageListener('urn:x-cast:com.eudoxe.cabane', function (msg) {
+  try { peindre(typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data); }
+  catch (err) { /* un message illisible ne doit pas vider l'écran */ }
+});
+
+// ⚠️ Sans média joué, le récepteur se fermerait tout seul au bout de
+// quelques minutes : ici l'écran DOIT rester tant que l'iPad est connecté.
+var options = new cast.framework.CastReceiverOptions();
+options.disableIdleTimeout = true;
+options.maxInactivity = 3600;
+contexte.start(options);
+</script>
+</body></html>
