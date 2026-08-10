@@ -53,15 +53,22 @@
     box-shadow:0 30px 90px rgba(0,0,0,.65)}
   .sleeve::after{content:"";position:absolute;inset:0;border-radius:1vh;
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+  /* ⚠️ PERF (2026-08-10, « le disque qui tourne rame ») : le drop-shadow
+     était un FILTRE sur un conteneur dont l'enfant tourne — recalculé à
+     chaque frame par le GPU d'époque du puck. L'ombre devient une COUCHE
+     STATIQUE (::before) : dessinée une fois, composée ensuite. */
   .disqueWrap{position:absolute;left:3.5%;bottom:7%;
     height:min(30vh,17vw);width:min(30vh,17vw);
-    filter:drop-shadow(0 12px 26px rgba(0,0,0,.72));
     opacity:0;transition:opacity .6s ease}
+  .disqueWrap::before{content:"";position:absolute;inset:0;border-radius:50%;
+    box-shadow:0 12px 26px rgba(0,0,0,.72)}
+  /* Les sillons sont CUITS dans une image SVG (rasterisée une fois) au
+     lieu du repeating-radial-gradient — et `will-change` promet au
+     compositeur que seul `transform` bouge : la rotation devient une
+     composition pure, plus un re-dessin. */
   .rotor{position:absolute;inset:0;border-radius:50%;
-    background:
-      repeating-radial-gradient(circle at 50% 50%,
-        rgba(255,255,255,.05) 0 1px, rgba(0,0,0,0) 1px 3.6px),
-      radial-gradient(circle at 50% 50%, #141418 0%, #09090B 78%, #050506 100%);
+    background:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"%3E%3Cdefs%3E%3CradialGradient id="g"%3E%3Cstop offset="0%" stop-color="%23141418"/%3E%3Cstop offset="78%" stop-color="%2309090B"/%3E%3Cstop offset="100%" stop-color="%23050506"/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx="256" cy="256" r="256" fill="url(%23g)"/%3E%3Cg fill="none" stroke="%23ffffff" stroke-opacity=".05" stroke-width="1.4"%3E%3Ccircle cx="256" cy="256" r="116"/%3E%3Ccircle cx="256" cy="256" r="120"/%3E%3Ccircle cx="256" cy="256" r="124"/%3E%3Ccircle cx="256" cy="256" r="128"/%3E%3Ccircle cx="256" cy="256" r="132"/%3E%3Ccircle cx="256" cy="256" r="136"/%3E%3Ccircle cx="256" cy="256" r="140"/%3E%3Ccircle cx="256" cy="256" r="144"/%3E%3Ccircle cx="256" cy="256" r="148"/%3E%3Ccircle cx="256" cy="256" r="152"/%3E%3Ccircle cx="256" cy="256" r="156"/%3E%3Ccircle cx="256" cy="256" r="160"/%3E%3Ccircle cx="256" cy="256" r="164"/%3E%3Ccircle cx="256" cy="256" r="168"/%3E%3Ccircle cx="256" cy="256" r="172"/%3E%3Ccircle cx="256" cy="256" r="176"/%3E%3Ccircle cx="256" cy="256" r="180"/%3E%3Ccircle cx="256" cy="256" r="184"/%3E%3Ccircle cx="256" cy="256" r="188"/%3E%3Ccircle cx="256" cy="256" r="192"/%3E%3Ccircle cx="256" cy="256" r="196"/%3E%3Ccircle cx="256" cy="256" r="200"/%3E%3Ccircle cx="256" cy="256" r="204"/%3E%3Ccircle cx="256" cy="256" r="208"/%3E%3Ccircle cx="256" cy="256" r="212"/%3E%3Ccircle cx="256" cy="256" r="216"/%3E%3Ccircle cx="256" cy="256" r="220"/%3E%3Ccircle cx="256" cy="256" r="224"/%3E%3Ccircle cx="256" cy="256" r="228"/%3E%3Ccircle cx="256" cy="256" r="232"/%3E%3Ccircle cx="256" cy="256" r="236"/%3E%3Ccircle cx="256" cy="256" r="240"/%3E%3Ccircle cx="256" cy="256" r="244"/%3E%3Ccircle cx="256" cy="256" r="248"/%3E%3C/g%3E%3C/svg%3E') center/cover;
+    will-change:transform;
     animation:tourne 1.81s linear infinite}   /* 1,81 s = 33⅓ tours/min */
   .label{position:absolute;inset:28%;border-radius:50%;
     background-position:center;background-size:cover;
