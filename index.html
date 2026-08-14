@@ -47,12 +47,29 @@
      cover) — vrai en 16:9 comme sur tout autre écran. */
   .lueur{position:absolute;left:6%;top:26%;width:min(48vh,30vw);height:min(48vh,30vw);
     border-radius:50%;filter:blur(60px);opacity:.38}
-  .sleeve{position:absolute;left:7%;top:50%;transform:translateY(-50%);
-    height:min(74vh,44vw);width:min(74vh,44vw);border-radius:1vh;
+  /* ⑥ Le flip porté sur la télé (2026-08-15) : la pochette vit dans une
+     boîte en perspective ; armer une nouvelle face la fait BASCULER
+     (0,8 s, le tempo exact de l'iPad), verso = la matière floutée + la
+     face posée, tenu 2,4 s, puis fondu de retour au recto. */
+  .flip3d{position:absolute;left:7%;top:50%;transform:translateY(-50%);
+    height:min(74vh,44vw);width:min(74vh,44vw);perspective:170vh;
+    transition:opacity .35s ease}
+  .flipInner{position:absolute;inset:0;transform-style:preserve-3d;
+    transition:transform .8s cubic-bezier(.45,.08,.22,1)}
+  .flipInner.tourne{transform:rotateY(180deg)}
+  .flipInner.sansAnim{transition:none}
+  .sleeve,.sleeveDos{position:absolute;inset:0;border-radius:1vh;
     background-position:center;background-size:cover;
-    box-shadow:0 30px 90px rgba(0,0,0,.65)}
-  .sleeve::after{content:"";position:absolute;inset:0;border-radius:1vh;
+    box-shadow:0 30px 90px rgba(0,0,0,.65);
+    backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .sleeve::after,.sleeveDos::after{content:"";position:absolute;inset:0;border-radius:1vh;
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+  .sleeveDos{transform:rotateY(180deg);overflow:hidden}
+  .sleeveDos i{position:absolute;inset:0;background:inherit;
+    filter:blur(4vh) brightness(.42);transform:scale(1.2)}
+  .sleeveDos span{position:absolute;inset:0;display:flex;align-items:center;
+    justify-content:center;font-size:7vh;font-weight:700;color:#FFF;
+    letter-spacing:.2vh}
   /* ⚠️ PERF (2026-08-10, « le disque qui tourne rame ») : le drop-shadow
      était un FILTRE sur un conteneur dont l'enfant tourne — recalculé à
      chaque frame par le GPU d'époque du puck. L'ombre devient une COUCHE
@@ -97,6 +114,10 @@
     transition:opacity .5s ease}
   .piste b{display:block;font-size:1.3vh;letter-spacing:.3vh;font-weight:600;
     text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:.7vh}
+  /* ③bis : la piste courante encadrée de la précédente et de la suivante
+     en transparence — cumul des durées Discogs, horloge de la TÉLÉ. */
+  .pLigne{display:block;line-height:1.55;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
   /* bandeau « retourne le disque » — léger, haut-gauche, au-dessus de la
      pochette (elle commence vers 13vh) ; fondu d'opacité pur */
   .flip{position:absolute;left:3vh;top:3vh;display:flex;align-items:center;
@@ -105,6 +126,13 @@
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.22), 0 6px 22px rgba(0,0,0,.4);
     font-size:2vh;font-weight:500;letter-spacing:.02vh;
     opacity:0;transition:opacity .8s ease;pointer-events:none}
+  /* ③ + ⑤ : la pilule éphémère (volume, salon) — même capsule que le
+     bandeau, haut-DROIT, s'efface toute seule. */
+  .pilule{position:absolute;right:3vh;top:3vh;padding:1.2vh 2.2vh;
+    border-radius:100vh;background:rgba(5,5,8,.55);color:#FFF;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.22), 0 6px 22px rgba(0,0,0,.4);
+    font-size:2vh;font-weight:500;letter-spacing:.02vh;
+    opacity:0;transition:opacity .45s ease;pointer-events:none}
   /* L'attente : ni logo ni « connecté ». Un point qui respire, et c'est
      tout — on ne meuble pas un écran de salon. */
   .veille{position:absolute;inset:0;display:flex;align-items:center;
@@ -117,7 +145,10 @@
 <body>
   <div class="fond" id="fond"></div><div class="voile"></div><div class="vignette"></div>
   <div class="lueur" id="lueur"></div>
-  <div class="sleeve" id="sleeve"></div>
+  <div class="flip3d" id="flip3d"><div class="flipInner" id="flipInner">
+    <div class="sleeve" id="sleeve"></div>
+    <div class="sleeveDos" id="sleeveDos"><i></i><span id="dosFace"></span></div>
+  </div></div>
   <div class="disqueWrap" id="platine">
     <div class="rotor"><div class="label" id="label"></div></div>
     <div class="sheen"></div><div class="trou"></div>
@@ -127,10 +158,13 @@
     <h1 id="titre"></h1>
     <div class="artiste" id="artiste"></div>
     <div class="meta" id="meta"></div>
-    <div class="piste" id="piste"><b>En cours</b><span id="pisteTxt"></span></div>
+    <div class="piste" id="piste"><b>En cours</b><span class="pLigne" id="pPrec"
+      style="opacity:.35"></span><span class="pLigne" id="pisteTxt"></span><span
+      class="pLigne" id="pSuiv" style="opacity:.35"></span></div>
   </div>
   <div class="flip" id="flip"><span style="font-size:2.4vh;line-height:1"
        id="flipPic">&#10227;</span><span id="flipTxt"></span></div>
+  <div class="pilule" id="pilule"></div>
   <div class="veille" id="veille"><i></i></div>
 
 <script>
@@ -146,12 +180,14 @@ function image(id, url) {
 }
 
 function peindre(e) {
+  var ancien = etat;
   etat = e;
   var vinyle = e.mode === 'vinyle';
   var accent = (e.couleurs && e.couleurs[0]) || '#E8A020';
 
   image('fond', e.cover);
   image('sleeve', e.cover);
+  image('sleeveDos', e.cover);
   image('label', e.cover);
   document.getElementById('lueur').style.background =
     'radial-gradient(circle, ' + accent + ' 0%, transparent 62%)';
@@ -165,8 +201,13 @@ function peindre(e) {
 
   // ⚠️ La piste n'apparaît QUE si l'émetteur la connaît. Pas de tiret,
   // pas de « — » : on ne meuble pas (règle de l'app, la même que la météo).
-  texte('pisteTxt', e.piste);
-  document.getElementById('piste').style.opacity = e.piste ? 1 : 0;
+  // Streaming : la courante seule. Vinyle : majPiste (durées Discogs +
+  // horloge de la télé) prend la main à chaque seconde.
+  if (!vinyle) {
+    texte('pPrec', ''); texte('pSuiv', '');
+    texte('pisteTxt', e.piste);
+    document.getElementById('piste').style.opacity = e.piste ? 1 : 0;
+  }
 
   // Le disque ne tourne que pour un vinyle : le dessiner sur un flux
   // Deezer serait un faux objet.
@@ -175,29 +216,96 @@ function peindre(e) {
   document.getElementById('texte').classList.remove('cache');
   document.getElementById('veille').classList.add('cache');
   majBandeau();
+  majPiste();
+
+  // ⑥ Une nouvelle face vient d'être posée → la pochette bascule (le
+  // langage exact du flip iPad). `flip` n'est envoyé qu'à ce moment-là.
+  if (e.flip && ancien && ancien.face && e.face && ancien.face !== e.face) {
+    animerFlip(e.face);
+  }
+}
+
+// ── ⑥ Le flip de pochette ────────────────────────────────────
+var flipEnCours = false;
+function animerFlip(face) {
+  if (flipEnCours) return;
+  flipEnCours = true;
+  texte('dosFace', 'Face ' + face);
+  var inner = document.getElementById('flipInner');
+  var boite = document.getElementById('flip3d');
+  inner.classList.add('tourne');                       // bascule 0,8 s
+  setTimeout(function () {                             // verso tenu 2,4 s
+    boite.style.opacity = 0;                           // fondu…
+    setTimeout(function () {
+      inner.classList.add('sansAnim');
+      inner.classList.remove('tourne');                // …retour muet au recto
+      void inner.offsetWidth;
+      inner.classList.remove('sansAnim');
+      boite.style.opacity = 1;
+      flipEnCours = false;
+    }, 380);
+  }, 3200);
+}
+
+// ── ③ + ⑤ La pilule éphémère ─────────────────────────────────
+var piluleTimer = null;
+function montrerPilule(txt, sec) {
+  var el = document.getElementById('pilule');
+  el.textContent = txt;
+  el.style.opacity = 1;
+  if (piluleTimer) clearTimeout(piluleTimer);
+  piluleTimer = setTimeout(function () { el.style.opacity = 0; }, sec * 1000);
 }
 
 // ── Le bandeau de fin de face ────────────────────────────────
 // L'émetteur envoie l'INSTANT de fin (epoch, en secondes) ; l'horloge
 // locale de la télé décide de l'affichage. Le bandeau tombe donc pile à
-// l'heure même si aucun message n'arrive entre-temps.
+// l'heure même si aucun message n'arrive entre-temps. `geste` (multi-
+// disques : « Change de disque — disque 2 · face C ») prime s'il existe.
 function majBandeau() {
   var el = document.getElementById('flip');
   var e = etat || {};
   var visible = e.mode === 'vinyle' && !!e.fin && (Date.now() / 1000) >= e.fin;
   if (visible) {
-    texte('flipTxt', 'Face ' + (e.face || '') + ' terminée — retourne le disque'
-                     + (e.suivante ? ' (face ' + e.suivante + ')' : ''));
+    texte('flipTxt', 'Face ' + (e.face || '') + ' terminée — '
+                     + (e.geste || ('retourne le disque'
+                        + (e.suivante ? ' (face ' + e.suivante + ')' : ''))));
   }
   el.style.opacity = visible ? 1 : 0;
 }
-setInterval(majBandeau, 1000);
+
+// ── ③bis La piste en cours (vinyle) ──────────────────────────
+// Cumul des durées Discogs depuis la pose de la face, jugé par l'horloge
+// de la TÉLÉ. Durées incomplètes → l'émetteur n'envoie rien → rien ici
+// (failure-safe, la règle de toujours).
+function majPiste() {
+  var e = etat || {};
+  if (e.mode !== 'vinyle') return;
+  var el = document.getElementById('piste');
+  var ok = e.plages && e.plages.length && e.debutFace
+           && !(e.fin && (Date.now() / 1000) >= e.fin);
+  if (!ok) { el.style.opacity = 0; return; }
+  var t = Date.now() / 1000 - e.debutFace, cumul = 0, i = 0;
+  for (; i < e.plages.length; i++) {
+    cumul += e.plages[i].d;
+    if (t < cumul) break;
+  }
+  if (i >= e.plages.length) { el.style.opacity = 0; return; }
+  texte('pPrec', i > 0 ? e.plages[i - 1].t : '');
+  texte('pisteTxt', e.plages[i].t);
+  texte('pSuiv', i + 1 < e.plages.length ? e.plages[i + 1].t : '');
+  el.style.opacity = 1;
+}
+setInterval(function () { majBandeau(); majPiste(); }, 1000);
 
 // ── Le canal Cast ────────────────────────────────────────────
 var contexte = cast.framework.CastReceiverContext.getInstance();
 contexte.addCustomMessageListener('urn:x-cast:com.eudoxe.cabane', function (msg) {
-  try { peindre(typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data); }
-  catch (err) { /* un message illisible ne doit pas vider l'écran */ }
+  try {
+    var d = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data;
+    if (d && d.pilule) { montrerPilule(d.pilule, d.duree || 2); return; }
+    peindre(d);
+  } catch (err) { /* un message illisible ne doit pas vider l'écran */ }
 });
 
 // ⚠️ Sans média joué, le récepteur se fermerait tout seul au bout de
