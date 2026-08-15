@@ -133,6 +133,49 @@
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.22), 0 6px 22px rgba(0,0,0,.4);
     font-size:2vh;font-weight:500;letter-spacing:.02vh;
     opacity:0;transition:opacity .45s ease;pointer-events:none}
+  /* ⑦ L'ENTRACTE — la face finit : la pochette recule d'un ton, la face
+     jouée se relit, les crédits de CE disque (jamais la collection).
+     L'écran reste ainsi jusqu'au geste suivant. Fondu pur, rien ne pulse. */
+  .entracte{position:absolute;right:6.5%;top:50%;transform:translateY(-50%);
+    width:36%;opacity:0;transition:opacity 1.1s ease;pointer-events:none}
+  .entracte .fin{font-size:1.7vh;letter-spacing:.35vh;text-transform:uppercase;
+    color:rgba(255,255,255,.55);margin-bottom:1vh}
+  .entracte h2{font-size:3.4vh;font-weight:700;color:#FFF;letter-spacing:-.05vh;
+    line-height:1.1}
+  .entracte .qui{font-size:2vh;color:rgba(255,255,255,.6);margin-top:.5vh}
+  .entracte .liste{margin:2.4vh 0;padding:1vh 0;
+    border-top:1px solid rgba(255,255,255,.14);
+    border-bottom:1px solid rgba(255,255,255,.14)}
+  .entracte .lp{display:flex;justify-content:space-between;gap:2vh;
+    font-size:1.9vh;color:rgba(255,255,255,.55);line-height:1.95}
+  .entracte .lp span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .entracte .lp b{font-weight:400;color:rgba(255,255,255,.38);
+    font-variant-numeric:tabular-nums}
+  .entracte .cred{font-size:1.7vh;color:rgba(255,255,255,.45)}
+  .faces{position:absolute;right:3vh;top:3vh;display:flex;gap:1.2vh;
+    opacity:0;transition:opacity 1.1s ease}
+  .faces i{width:3.6vh;height:3.6vh;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-style:normal;
+    font-size:1.7vh;font-weight:600;color:rgba(255,255,255,.45);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+  .faces i.jouee{color:rgba(255,255,255,.25);text-decoration:line-through;
+    box-shadow:none;background:rgba(255,255,255,.07)}
+  .faces i.armee{color:#0b0a09;background:#E8A020;box-shadow:none}
+  .pied{position:absolute;bottom:5vh;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:1.2vh;padding:1.3vh 2.4vh;
+    border-radius:100vh;background:rgba(5,5,8,.6);color:#FFF;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 6px 22px rgba(0,0,0,.4);
+    font-size:2.1vh;font-weight:500;opacity:0;transition:opacity 1.1s ease}
+  .pied b{width:.9vh;height:.9vh;border-radius:50%;background:#E8A020}
+  /* le mode entracte éteint le reste, en fondu */
+  .texte{transition:opacity .9s ease}
+  body.enEntracte .texte{opacity:0}
+  body.enEntracte .disqueWrap{opacity:0 !important}
+  body.enEntracte .flip3d{opacity:.55}
+  body.enEntracte .flip{opacity:0 !important}
+  body.enEntracte .entracte{opacity:1}
+  body.enEntracte .faces{opacity:1}
+  body.enEntracte .pied.actif{opacity:1}
   /* L'attente : ni logo ni « connecté ». Un point qui respire, et c'est
      tout — on ne meuble pas un écran de salon. */
   .veille{position:absolute;inset:0;display:flex;align-items:center;
@@ -165,6 +208,15 @@
   <div class="flip" id="flip"><span style="font-size:2.4vh;line-height:1"
        id="flipPic">&#10227;</span><span id="flipTxt"></span></div>
   <div class="pilule" id="pilule"></div>
+  <div class="faces" id="facesChips"></div>
+  <div class="entracte" id="entracte">
+    <div class="fin" id="entracteFin"></div>
+    <h2 id="entracteAlbum"></h2>
+    <div class="qui" id="entracteArtiste"></div>
+    <div class="liste" id="entracteListe"></div>
+    <div class="cred" id="entracteCred"></div>
+  </div>
+  <div class="pied" id="pied"><b></b><span id="piedTxt"></span></div>
   <div class="veille" id="veille"><i></i></div>
 
 <script>
@@ -215,8 +267,10 @@ function peindre(e) {
 
   document.getElementById('texte').classList.remove('cache');
   document.getElementById('veille').classList.add('cache');
+  pisteIndex = -1;
   majBandeau();
   majPiste();
+  majEntracte();
 
   // ⑥ Une nouvelle face vient d'être posée → la pochette bascule (le
   // langage exact du flip iPad). `flip` n'est envoyé qu'à ce moment-là.
@@ -278,25 +332,107 @@ function majBandeau() {
 // Cumul des durées Discogs depuis la pose de la face, jugé par l'horloge
 // de la TÉLÉ. Durées incomplètes → l'émetteur n'envoie rien → rien ici
 // (failure-safe, la règle de toujours).
+var pisteIndex = -1;
+function poserPiste(e, i) {
+  texte('pPrec', i > 0 ? e.plages[i - 1].t : '');
+  texte('pisteTxt', e.plages[i].t);
+  texte('pSuiv', i + 1 < e.plages.length ? e.plages[i + 1].t : '');
+}
 function majPiste() {
   var e = etat || {};
   if (e.mode !== 'vinyle') return;
   var el = document.getElementById('piste');
   var ok = e.plages && e.plages.length && e.debutFace
            && !(e.fin && (Date.now() / 1000) >= e.fin);
-  if (!ok) { el.style.opacity = 0; return; }
+  if (!ok) { el.style.opacity = 0; pisteIndex = -1; return; }
   var t = Date.now() / 1000 - e.debutFace, cumul = 0, i = 0;
   for (; i < e.plages.length; i++) {
     cumul += e.plages[i].d;
     if (t < cumul) break;
   }
   if (i >= e.plages.length) { el.style.opacity = 0; return; }
-  texte('pPrec', i > 0 ? e.plages[i - 1].t : '');
-  texte('pisteTxt', e.plages[i].t);
-  texte('pSuiv', i + 1 < e.plages.length ? e.plages[i + 1].t : '');
-  el.style.opacity = 1;
+  if (i !== pisteIndex && pisteIndex >= 0) {
+    // la liste glisse d'un cran : fondu pur, le texte change au creux
+    el.style.opacity = 0.12;
+    (function (ee, ii) {
+      setTimeout(function () { poserPiste(ee, ii); el.style.opacity = 1; }, 460);
+    })(e, i);
+  } else {
+    poserPiste(e, i);
+    el.style.opacity = 1;
+  }
+  pisteIndex = i;
 }
-setInterval(function () { majBandeau(); majPiste(); }, 1000);
+
+// ── ⑦ L'entracte ─────────────────────────────────────────────
+// La face finit (horloge de la télé) : tout l'écran passe en entracte —
+// la pochette recule, la face jouée se relit, les crédits de CE disque,
+// la pilule dit le geste. Il RESTE ainsi jusqu'à la face suivante.
+// Fin d'album : pas de geste à faire → l'écran rend la télé après 4 min.
+var relacheTimer = null;
+function majEntracte() {
+  var e = etat || {};
+  var due = e.mode === 'vinyle' && !!e.fin && (Date.now() / 1000) >= e.fin;
+  var corps = document.body;
+  if (!due) {
+    if (corps.classList.contains('enEntracte')) {
+      corps.classList.remove('enEntracte');
+      document.getElementById('pied').classList.remove('actif');
+      if (relacheTimer) { clearTimeout(relacheTimer); relacheTimer = null; }
+    }
+    return;
+  }
+  if (corps.classList.contains('enEntracte')) return;
+  corps.classList.add('enEntracte');
+
+  var lettres = e.faces || [];
+  var i = lettres.indexOf(e.face);
+  var disque = i >= 0 ? Math.floor(i / 2) + 1 : 1;
+  var titreFin;
+  if (e.derniere) {
+    titreFin = 'Album terminé'
+      + (e.dureeAlbum ? ' · ' + Math.round(e.dureeAlbum / 60) + ' min' : '');
+  } else if (e.geste && e.geste.indexOf('Change') === 0) {
+    titreFin = 'Disque ' + disque + ' terminé';
+  } else {
+    titreFin = 'Face ' + (e.face || '') + ' terminée';
+  }
+  texte('entracteFin', titreFin);
+  texte('entracteAlbum', e.titre);
+  texte('entracteArtiste', e.artiste);
+  texte('entracteCred', e.credits || e.meta || '');
+
+  var liste = document.getElementById('entracteListe');
+  liste.textContent = '';
+  (e.plages || []).forEach(function (p) {
+    var l = document.createElement('div'); l.className = 'lp';
+    var t = document.createElement('span'); t.textContent = p.t;
+    var d = document.createElement('b');
+    d.textContent = Math.floor(p.d / 60) + ':' + ('0' + (p.d % 60)).slice(-2);
+    l.appendChild(t); l.appendChild(d); liste.appendChild(l);
+  });
+
+  var chips = document.getElementById('facesChips');
+  chips.textContent = '';
+  lettres.forEach(function (l, k) {
+    var c = document.createElement('i'); c.textContent = l;
+    if (k <= i) c.className = 'jouee';
+    if (!e.derniere && l === e.suivante) c.className = 'armee';
+    chips.appendChild(c);
+  });
+
+  var pied = document.getElementById('pied');
+  if (!e.derniere && e.geste) {
+    texte('piedTxt', e.geste);
+    pied.classList.add('actif');
+  } else {
+    pied.classList.remove('actif');
+    if (e.derniere) {
+      relacheTimer = setTimeout(function () { contexte.stop(); }, 4 * 60 * 1000);
+    }
+  }
+}
+setInterval(function () { majBandeau(); majPiste(); majEntracte(); }, 1000);
 
 // ── Le canal Cast ────────────────────────────────────────────
 var contexte = cast.framework.CastReceiverContext.getInstance();
