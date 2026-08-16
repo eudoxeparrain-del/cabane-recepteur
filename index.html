@@ -470,12 +470,29 @@ function sonde(texte) {
   el.innerHTML = (h + '  ' + texte + '<br>' + el.innerHTML).split('<br>')
     .slice(0, 7).join('<br>');
 }
+// Ce qu'on renvoie à l'app : elle traduira en gestes sur l'ampli.
+function versApp(touche) {
+  try {
+    contexte.sendCustomMessage('urn:x-cast:com.eudoxe.cabane', undefined,
+                               { zappeur: touche });
+  } catch (err) { /* pas de sender connecté : tant pis */ }
+}
+var dernierNiveau = null;
 try {
   contexte.addEventListener(cast.framework.system.EventType.SYSTEM_VOLUME_CHANGED,
     function (e) {
       var d = e && e.data ? e.data : {};
       sonde('VOLUME ' + (d.level != null ? Math.round(d.level * 100) + '%' : '?')
             + (d.muted ? ' · muet' : ''));
+      // On ne transmet PAS un niveau (l'ampli est en dB, la télé en %) mais
+      // le SENS du geste : monter ou baisser d'un cran. C'est robuste, et ça
+      // marche même si les deux échelles n'ont rien à voir.
+      if (d.level != null) {
+        if (dernierNiveau != null && Math.abs(d.level - dernierNiveau) > 0.001) {
+          versApp(d.level > dernierNiveau ? 'volume_haut' : 'volume_bas');
+        }
+        dernierNiveau = d.level;
+      }
     });
   contexte.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED,
     function () { sonde('sonde active — appuie sur les touches'); });
@@ -483,7 +500,12 @@ try {
 try {
   var joueur = contexte.getPlayerManager();
   joueur.addEventListener(cast.framework.events.category.REQUEST, function (e) {
-    sonde('TOUCHE → ' + (e && e.type ? e.type : '?'));
+    var t = (e && e.type ? String(e.type) : '?');
+    sonde('TOUCHE → ' + t);
+    var bas = t.toUpperCase();
+    if (bas.indexOf('PAUSE') >= 0 || bas.indexOf('PLAY') >= 0) versApp('play_pause');
+    else if (bas.indexOf('NEXT') >= 0) versApp('next');
+    else if (bas.indexOf('PREV') >= 0) versApp('previous');
   });
 } catch (err) { /* idem */ }
 
