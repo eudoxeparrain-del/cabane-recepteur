@@ -208,6 +208,14 @@
   <div class="flip" id="flip"><span style="font-size:2.4vh;line-height:1"
        id="flipPic">&#10227;</span><span id="flipTxt"></span></div>
   <div class="pilule" id="pilule"></div>
+  <!-- 🔬 SONDE DU ZAPPEUR (2026-08-16) : mesure « à deux » — elle n'apparaît
+       QUE si quelque chose arrive. Écran muet quand on appuie = le récepteur
+       ne reçoit pas les touches, et la feature ②⑨ est impossible par ce
+       canal. À retirer une fois la question tranchée (SONDE = false). -->
+  <div id="sonde" style="position:fixed;left:2vh;bottom:2vh;z-index:99;
+       font:1.5vh/1.7 ui-monospace,Menlo,monospace;color:#9ef;
+       background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.18);
+       border-radius:1vh;padding:1vh 1.4vh;max-width:52vw;display:none"></div>
   <div class="faces" id="facesChips"></div>
   <div class="entracte" id="entracte">
     <div class="fin" id="entracteFin"></div>
@@ -446,6 +454,39 @@ contexte.addCustomMessageListener('urn:x-cast:com.eudoxe.cabane', function (msg)
 
 // ⚠️ Sans média joué, le récepteur se fermerait tout seul au bout de
 // quelques minutes : ici l'écran DOIT rester tant que l'iPad est connecté.
+// ── 🔬 LA SONDE DU ZAPPEUR ───────────────────────────────────
+// On cherche à savoir si les touches de la TÉLÉCOMMANDE DE LA TÉLÉ
+// arrivent jusqu'ici (HDMI-CEC → Chromecast → récepteur) alors qu'AUCUN
+// média n'est chargé. Deux filets : le volume système, et la catégorie
+// REQUEST du PlayerManager (qui attrape toute commande entrante, quel
+// que soit son type). Tout ce qui tombe s'écrit à l'écran.
+var SONDE = true;
+function sonde(texte) {
+  if (!SONDE) return;
+  var el = document.getElementById('sonde');
+  if (!el) return;
+  var h = new Date().toTimeString().slice(0, 8);
+  el.style.display = 'block';
+  el.innerHTML = (h + '  ' + texte + '<br>' + el.innerHTML).split('<br>')
+    .slice(0, 7).join('<br>');
+}
+try {
+  contexte.addEventListener(cast.framework.system.EventType.SYSTEM_VOLUME_CHANGED,
+    function (e) {
+      var d = e && e.data ? e.data : {};
+      sonde('VOLUME ' + (d.level != null ? Math.round(d.level * 100) + '%' : '?')
+            + (d.muted ? ' · muet' : ''));
+    });
+  contexte.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED,
+    function () { sonde('sonde active — appuie sur les touches'); });
+} catch (err) { /* un SDK plus ancien ne doit pas casser l'écran */ }
+try {
+  var joueur = contexte.getPlayerManager();
+  joueur.addEventListener(cast.framework.events.category.REQUEST, function (e) {
+    sonde('TOUCHE → ' + (e && e.type ? e.type : '?'));
+  });
+} catch (err) { /* idem */ }
+
 var options = new cast.framework.CastReceiverOptions();
 options.disableIdleTimeout = true;
 options.maxInactivity = 3600;
